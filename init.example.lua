@@ -10,5 +10,11 @@ require("opener").setup({
   -- codeBin = "/opt/homebrew/bin/code",
   -- switchKeys = false,  -- default steps with Option+] / Option+\ (Instant Space Switcher); false = Mission Control
   -- openHotkey = { { "alt", "cmd" }, "o" },   -- picker; ⇧↩ closes the selected project
-  -- closeHotkey = { { "alt", "cmd" }, "w" },  -- close the project in the current Space
+})
+
+-- Vault picker; vaults are read from Obsidian's own config.
+require("obsidian").setup({
+  -- hotkey = { { "alt", "cmd" }, "v" },
+  -- scratch = { vault = "Personal", folder = "_scratch" },  -- must be git-ignored in the vault
+  -- scratchHotkey = { { "alt", "cmd" }, "s" },  -- link a loose file/folder into scratch and open it
 })

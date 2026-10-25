@@ -18,6 +18,7 @@ local cfg = {}
 local recent = {} -- project path -> last-used unix time
 local codeTitles = {} -- VS Code window id -> last seen title
 local codeFilter -- all-Spaces VS Code window filter, kept alive for title lookups
+local allFilter -- all-Spaces filter over every app, to tell whether a Space is empty
 local chooser
 local spaceHistory = {} -- Space ids, most recently visited first
 local spaceWatcher
@@ -373,6 +374,29 @@ end
 
 -- public actions --------------------------------------------------------
 
+-- Shared with obsidian.lua.
+M.switchTo = switchTo
+M.ensureOnSpace = ensureOnSpace
+M.waitFor = waitFor
+M.after = after
+M.activeSpace = activeSpace
+M.shellQuote = shellQuote
+
+-- Adds a Space to the main screen and returns its id (nil, after an alert, on failure).
+function M.createSpace()
+  local screen = hs.screen.mainScreen()
+  local before = setOf(hs.spaces.spacesForScreen(screen))
+  local ok, err = hs.spaces.addSpaceToScreen(screen, true)
+  if not ok then
+    hs.alert.show("opener: couldn't create a Space: " .. tostring(err))
+    return nil
+  end
+  for _, id in ipairs(hs.spaces.spacesForScreen(screen) or {}) do
+    if not before[id] then return id end
+  end
+  hs.alert.show("opener: couldn't find the new Space")
+end
+
 function M.open(p)
   touch(p.path)
   local existing = M.detect()[p.path]
@@ -381,22 +405,8 @@ function M.open(p)
     return
   end
 
-  local screen = hs.screen.mainScreen()
-  local before = setOf(hs.spaces.spacesForScreen(screen))
-  local ok, err = hs.spaces.addSpaceToScreen(screen, true)
-  if not ok then
-    hs.alert.show("opener: couldn't create a Space: " .. tostring(err))
-    return
-  end
-  local space
-  for _, id in ipairs(hs.spaces.spacesForScreen(screen) or {}) do
-    if not before[id] then space = id end
-  end
-  if not space then
-    hs.alert.show("opener: couldn't find the new Space")
-    return
-  end
-  launchInto(p, space)
+  local space = M.createSpace()
+  if space then launchInto(p, space) end
 end
 
 -- A Space to land on after `space` is removed: the regular desktop you were
@@ -419,6 +429,22 @@ local function neighbourSpace(space)
       if id and hs.spaces.spaceType(id) == "user" then return id end
     end
   end
+end
+
+-- Moves off `space` and removes it.
+local function removeSpace(space)
+  switchTo(neighbourSpace(space), function()
+    hs.spaces.removeSpace(space, true)
+  end)
+end
+
+-- Removes `space` unless some window is still on it.
+function M.removeSpaceIfEmpty(space)
+  local inSpace = setOf(hs.spaces.windowsForSpace(space))
+  for _, w in ipairs(allFilter:getWindows()) do
+    if inSpace[w:id()] then return end
+  end
+  removeSpace(space)
 end
 
 function M.close(p)
@@ -463,24 +489,9 @@ function M.close(p)
         hs.alert.show(p.name .. ": a window is still open (unsaved changes?), keeping Space")
         return
       end
-      local dest = neighbourSpace(space)
-      switchTo(dest, function()
-        hs.spaces.removeSpace(space, true)
-      end)
+      removeSpace(space)
     end)
   end)
-end
-
-function M.closeCurrent()
-  local current = activeSpace()
-  local open = M.detect()
-  for _, p in ipairs(discoverProjects()) do
-    if open[p.path] == current then
-      M.close(p)
-      return
-    end
-  end
-  hs.alert.show("opener: no open project on this Space")
 end
 
 -- picker ----------------------------------------------------------------
@@ -559,11 +570,10 @@ function M.setup(opts)
 
   codeFilter = hs.window.filter.new(false):setAppFilter("Code", {})
   codeFilter:setCurrentSpace(nil)
+  allFilter = hs.window.filter.new(true):setCurrentSpace(nil)
 
   local open = cfg.openHotkey or { { "alt", "cmd" }, "o" }
-  local close = cfg.closeHotkey or { { "alt", "cmd" }, "w" }
   hs.hotkey.bind(open[1], open[2], M.showPicker)
-  hs.hotkey.bind(close[1], close[2], M.closeCurrent)
   return M
 end
 
