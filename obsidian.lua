@@ -277,19 +277,71 @@ local function removeLink(name)
   os.remove(full)
 end
 
+local MAX_COMPLETIONS = 100
+
+-- Entries under the directory a typed path points into, to pick from instead
+-- of typing: with a trailing slash everything in that folder, otherwise those
+-- in its parent starting with what's typed after the last slash. Dotfiles only
+-- show once you type a leading dot. Folders first. Row text keeps the typed
+-- prefix so the chooser's own filter keeps the row.
+local function completions(query, typed)
+  local trimmed = query:gsub("^%s+", ""):gsub("%s+$", "")
+  local dir, fragment
+  if trimmed:sub(-1) == "/" then
+    dir, fragment = typed, ""
+  else
+    dir, fragment = typed:match("^(.*)/([^/]*)$")
+    if dir == "" then dir = "/" end
+  end
+  if not dir or hs.fs.attributes(dir, "mode") ~= "directory" then return {} end
+  local prefix = trimmed:match("^(.*/)") or ""
+  local wanted = fragment:lower()
+  local showHidden = fragment:sub(1, 1) == "."
+
+  local found = {}
+  for name in hs.fs.dir(dir) do
+    local full = (dir == "/" and "" or dir) .. "/" .. name
+    if name ~= "." and name ~= ".." and (showHidden or name:sub(1, 1) ~= ".")
+        and name:lower():sub(1, #wanted) == wanted and full ~= typed then
+      found[#found + 1] = { name = name, full = full, folder = hs.fs.attributes(full, "mode") == "directory" }
+    end
+  end
+  table.sort(found, function(a, b)
+    if a.folder ~= b.folder then return a.folder end
+    return a.name:lower() < b.name:lower()
+  end)
+
+  local choices = {}
+  for i = 1, math.min(#found, MAX_COMPLETIONS) do
+    local f = found[i]
+    choices[i] = {
+      text = prefix .. f.name .. (f.folder and "/" or ""),
+      subText = f.folder and (f.full .. "  (↩ opens the folder, ⌥↩ links it)")
+        or (f.full .. "  (↩ links and opens it)"),
+      path = f.full,
+      folder = f.folder,
+    }
+  end
+  return choices
+end
+
 local function scratchChoices(query)
   query = query or ""
   local typed = parsePath(query)
   if typed then
     local mode = hs.fs.attributes(typed, "mode")
     local kind = mode == "directory" and "folder" or mode == "file" and "file" or nil
-    -- The text is the query itself so the chooser's own filter keeps the row.
-    return { {
-      text = query,
-      subText = kind and ("Link this " .. kind .. " and open it — " .. typed) or "Not found",
-      path = kind and typed or nil,
-      invalid = not kind,
-    } }
+    local choices = completions(query, typed)
+    if kind or #choices == 0 then
+      -- The text is the query itself so the chooser's own filter keeps the row.
+      table.insert(choices, 1, {
+        text = query,
+        subText = kind and ("Link this " .. kind .. " and open it — " .. typed) or "Not found",
+        path = kind and typed or nil,
+        invalid = not kind,
+      })
+    end
+    return choices
   end
 
   local entries = {}
@@ -333,11 +385,18 @@ function M.showScratch()
         else
           openEntry(choice.link)
         end
+      elseif choice.folder and not hs.eventtap.checkKeyboardModifiers().alt then
+        -- Step into the folder: reopen the chooser with its path typed.
+        hs.timer.doAfter(0, function()
+          scratchChooser:query(choice.text)
+          scratchChooser:choices(scratchChoices(choice.text))
+          scratchChooser:show()
+        end)
       elseif choice.path then
         linkAndOpen(choice.path)
       end
     end)
-    scratchChooser:placeholderText("Type a full path to a file or folder (⇧↩ removes a link)")
+    scratchChooser:placeholderText("Type a path; entries list as you type (⇧↩ removes a link)")
     scratchChooser:queryChangedCallback(function(query)
       scratchChooser:choices(scratchChoices(query))
     end)

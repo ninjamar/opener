@@ -1,11 +1,11 @@
 -- Copy this into ~/.hammerspoon/init.lua (or append it if you already have one).
-package.path = package.path .. ";/Users/ram/coding/opener/?.lua"
+package.path = package.path .. ";" .. os.getenv("HOME") .. "/path/to/opener/?.lua"
 
 require("opener").setup({
   -- every folder in a root becomes a project...
-  roots = { "~/coding", "~/coding/www" },
+  roots = { "~/code", "~/code/work" },
   -- ...except these, which are containers whose subfolders are the projects
-  exclude = { "~/coding/www" },
+  exclude = { "~/code/work" },
   -- projects = { { name = "dotfiles", path = "~/.dotfiles" } },  -- extras
   -- codeBin = "/opt/homebrew/bin/code",
   -- switchKeys = false,  -- default steps with Option+] / Option+\ (Instant Space Switcher); false = Mission Control

@@ -8,7 +8,7 @@ Quick tools to open/close spaces on my mac. Each project, and each Obsidian vaul
 | --- | --- | --- | --- |
 | Option + Command + O | Projects | Open the project, or jump to it if it's open | Close it and remove its desktop |
 | Option + Command + V | Obsidian vaults | Open the vault, or jump to it if it's open | Close it and remove its desktop |
-| Option + Command + S | Obsidian scratch | Link a file or folder and open it, or open an existing link | Remove the link |
+| Option + Command + S | Obsidian scratch | Type a path (files and folders list as you type; Enter on a folder steps into it, Option + Enter links it) and open it, or open an existing link | Remove the link |
 
 Open items show a `●` and sort first.
 
