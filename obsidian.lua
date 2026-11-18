@@ -204,6 +204,14 @@ local function parsePath(query)
   return q
 end
 
+-- The path symlink `path` points at, or nil. hs.fs.symlinkAttributes has no
+-- `target` field, so ask readlink.
+local function readLink(path)
+  local out, ok = hs.execute("/usr/bin/readlink " .. opener.shellQuote(path))
+  if not ok then return nil end
+  return (out:gsub("\n$", ""))
+end
+
 -- Name to link `target` under in `dir`: the existing link to it if there is
 -- one, else its basename, else basename-2, basename-3, ...
 local function linkName(dir, target)
@@ -215,7 +223,7 @@ local function linkName(dir, target)
     local candidate = n == 1 and name or (base .. "-" .. n .. ext)
     local attrs = hs.fs.symlinkAttributes(dir .. "/" .. candidate)
     if not attrs then return candidate, false end
-    if attrs.mode == "link" and attrs.target == target then return candidate, true end
+    if attrs.mode == "link" and readLink(dir .. "/" .. candidate) == target then return candidate, true end
     n = n + 1
   end
 end
@@ -348,8 +356,9 @@ local function scratchChoices(query)
   if hs.fs.attributes(scratch.dir, "mode") == "directory" then
     for name in hs.fs.dir(scratch.dir) do
       local attrs = name:sub(1, 1) ~= "." and hs.fs.symlinkAttributes(scratch.dir .. "/" .. name)
-      if attrs and attrs.mode == "link" then
-        entries[#entries + 1] = { name = name, target = attrs.target, modified = attrs.modification or 0 }
+      local target = attrs and attrs.mode == "link" and readLink(scratch.dir .. "/" .. name)
+      if target then
+        entries[#entries + 1] = { name = name, target = target, modified = attrs.modification or 0 }
       end
     end
   end
